@@ -1,0 +1,48 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# build / deploy
+dist/
+.output/
+.vercel/
+.nitro/
+.tanstack/
+.vinxi/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# logs / caches
+*.log
+npm-debug.log*
+.DS_Store
+*.local
+.cache/
+.tmp/
+
+# editor
+.idea/
+.vscode/
+*.swp
+
+# sandbox / agent
+.project_id
+.node_modules.lock
+screenshots/
+artifacts/
+attachments/
+/tmp/
+
+# OS
+Thumbs.db
+
+# App Builder / agent sandbox (not part of the product)
+.grok/
+AGENTS.md
+AGENTS.project.md
+vendor/
+startup.sh
