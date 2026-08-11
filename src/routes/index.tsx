@@ -6,6 +6,8 @@ import { JoyCost } from "@/components/museum/joy-cost";
 import { DepHell } from "@/components/museum/dep-hell";
 import { AiWaste } from "@/components/museum/ai-waste";
 import { ToolSprawl } from "@/components/museum/tool-sprawl";
+import { MutableDefault } from "@/components/museum/mutable-default";
+import { GilLie } from "@/components/museum/gil-lie";
 import { Verdict } from "@/components/museum/verdict";
 import { ShareButton } from "@/components/museum/share-button";
 import { AuthSlot } from "@/components/museum/auth-slot";
@@ -89,6 +91,8 @@ function MuseumHome() {
           <DepHell />
           <AiWaste />
           <ToolSprawl />
+          <MutableDefault />
+          <GilLie />
           <div id="verdict">
             <Verdict />
           </div>
