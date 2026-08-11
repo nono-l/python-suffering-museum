@@ -1,59 +1,75 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Share2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { shareMuseum } from "@/lib/share";
+import { buttonVariants } from "@/components/ui/button";
+import {
+  getXIntentUrl,
+  SHARE_TEXT,
+  VERDICT_SHARE_TEXT,
+} from "@/lib/share";
 import { recordMuseumEvent } from "@/lib/museum-stats";
 import { cn } from "@/lib/utils";
+import type { VariantProps } from "class-variance-authority";
+
+type ButtonVariant = VariantProps<typeof buttonVariants>["variant"];
+type ButtonSize = VariantProps<typeof buttonVariants>["size"];
 
 type Props = {
-  variant?: "default" | "secondary" | "outline" | "ghost" | "danger";
-  size?: "default" | "sm" | "lg" | "icon";
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   className?: string;
   label?: string;
+  /** Share body text (URL is appended automatically). */
+  text?: string;
+  /** Use the verdict-specific copy. */
+  mode?: "default" | "verdict";
 };
 
+/**
+ * Real X Web Intent link (`<a href="https://twitter.com/intent/tweet?...">`).
+ * Not Web Share API, not window.open-only — middle-click / new tab work.
+ */
 export function ShareButton({
   variant = "secondary",
   size = "sm",
   className,
   label = "Xでシェア",
+  text,
+  mode = "default",
 }: Props) {
-  const [status, setStatus] = useState<"idle" | "ok" | "copied">("idle");
+  const [status, setStatus] = useState<"idle" | "ok">("idle");
+  const shareText =
+    text ?? (mode === "verdict" ? VERDICT_SHARE_TEXT : SHARE_TEXT);
 
-  async function onShare() {
-    try {
-      const result = await shareMuseum();
-      void recordMuseumEvent("share");
-      if (result === "copied") {
-        setStatus("copied");
-      } else {
-        setStatus("ok");
-      }
-      window.setTimeout(() => setStatus("idle"), 2200);
-    } catch {
-      // cancelled
-    }
+  // Stable text-only intent for SSR/hydration; attach page URL after mount.
+  const [intentHref, setIntentHref] = useState(() => getXIntentUrl(shareText, ""));
+
+  useEffect(() => {
+    setIntentHref(getXIntentUrl(shareText));
+  }, [shareText]);
+
+  function onShare() {
+    void recordMuseumEvent("share");
+    setStatus("ok");
+    window.setTimeout(() => setStatus("idle"), 2200);
   }
 
   return (
-    <Button
-      type="button"
-      variant={variant}
-      size={size}
-      className={cn(className)}
+    <a
+      href={intentHref}
+      target="_blank"
+      rel="noopener noreferrer"
       onClick={onShare}
       aria-label="X（Twitter）でシェア"
+      className={cn(buttonVariants({ variant, size }), className)}
     >
-      {status === "copied" || status === "ok" ? (
+      {status === "ok" ? (
         <Check className="h-4 w-4" />
       ) : (
         <Share2 className="h-4 w-4" />
       )}
       {size !== "icon" && (
-        <span>
-          {status === "copied" ? "コピーしました" : status === "ok" ? "開きました" : label}
-        </span>
+        <span>{status === "ok" ? "Xを開きました" : label}</span>
       )}
-    </Button>
+    </a>
   );
 }

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { LogIn, LogOut } from "lucide-react";
 import { authEnabled, signOut } from "@/lib/auth/client";
@@ -5,8 +6,13 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 
 export function AuthSlot() {
   const { user, isPending } = useCurrentUserState();
+  const [mounted, setMounted] = useState(false);
 
-  if (isPending) {
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || isPending) {
     return (
       <div
         className="h-9 w-24 animate-pulse rounded-[var(--radius-sm)] bg-[var(--color-elevated)]"

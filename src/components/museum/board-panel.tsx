@@ -28,11 +28,18 @@ function formatWhen(iso: string) {
 
 export function BoardPanel() {
   const { user, isPending } = useCurrentUserState();
+  // SSR and client session resolution can disagree on first paint; hold a
+  // stable shell until mounted so hydration matches.
+  const [mounted, setMounted] = useState(false);
   const [posts, setPosts] = useState<BoardPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -48,8 +55,9 @@ export function BoardPanel() {
   }, []);
 
   useEffect(() => {
+    if (!mounted) return;
     void refresh();
-  }, [refresh]);
+  }, [refresh, mounted]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -88,6 +96,10 @@ export function BoardPanel() {
     }
   }
 
+  const sessionLoading = !mounted || isPending;
+  // Posts only load after mount — keep SSR/client first paint identical.
+  const postsLoading = !mounted || loading;
+
   return (
     <section className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 sm:p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -113,7 +125,7 @@ export function BoardPanel() {
       </div>
 
       <div className="mb-5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-elevated)] p-4">
-        {isPending ? (
+        {sessionLoading ? (
           <div className="flex items-center gap-2 text-sm text-[var(--color-muted)]">
             <Loader2 className="h-4 w-4 animate-spin" />
             セッション確認中…
@@ -169,7 +181,7 @@ export function BoardPanel() {
         )}
       </div>
 
-      {loading ? (
+      {postsLoading ? (
         <div className="flex items-center gap-2 py-8 text-sm text-[var(--color-muted)]">
           <Loader2 className="h-4 w-4 animate-spin" />
           掲示を読み込み中…

@@ -163,7 +163,7 @@ export function Verdict() {
         >
           弁護側の主張（全部外す）
         </Button>
-        <ShareButton variant="secondary" label="判決をXでシェア" />
+        <ShareButton variant="secondary" label="判決をXでシェア" mode="verdict" />
         <p className="w-full text-sm text-[var(--color-muted)] sm:w-auto sm:flex-1">
           {score === 100
             ? "判決: 書くのが楽しいだけのカス言語。ただしその楽しさは、他者の時間と AI の知能を燃料にしている。"
