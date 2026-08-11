@@ -44,6 +44,7 @@ import {
   PREVIEW_CLIENT_ID,
   PREVIEW_CLIENT_SECRET,
 } from "./preview";
+import { EXTRA_AUTH_HOSTS } from "./extra-hosts";
 
 // Kick (and share) PGLite bootstrap as soon as the auth server module loads.
 void ensureDbReady();
@@ -68,6 +69,19 @@ const env = (key: string): string | undefined => {
   return value ? value : undefined;
 };
 
+/** Normalize `https://host` / `host/path` → bare hostname (no port unless present). */
+function hostFromUrlOrHost(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const raw = value.trim();
+  if (!raw) return undefined;
+  try {
+    const u = new URL(raw.includes("://") ? raw : `https://${raw}`);
+    return u.host || undefined;
+  } catch {
+    return raw.replace(/^https?:\/\//, "").split("/")[0] || undefined;
+  }
+}
+
 // Explicit off-switch. The deployer sets `VITE_AUTH_ENABLED=true` when it
 // provisions auth; set it to "false" to force auth off everywhere (dev user).
 const authDisabled = env("VITE_AUTH_ENABLED") === "false";
@@ -83,45 +97,58 @@ const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PREVIEW_CLIENT_SECRET
 export const authConfigured =
   !authDisabled && Boolean(grokClientId && grokClientSecret);
 
-// This app's own Better Auth origin. When deployed the deployer injects the
-// public URL. In the sandbox live preview there's no fixed URL (each preview gets
-// a dynamic `*.grok-sandbox.com` host), so we hand Better Auth a dynamic baseURL:
-// it derives the origin per-request from the (proxied) host, validated against the
-// preview allowlist, which makes the OAuth `redirect_uri` the concrete preview URL
-// the broker's preview client accepts.
+// This app's own Better Auth origin.
+//
+// ALWAYS use dynamic baseURL (even when BETTER_AUTH_URL is injected). A static
+// baseURL forces OAuth `redirect_uri` onto the platform host (e.g.
+// `*.grok.me`) even when the visitor is on a custom domain — the session cookie
+// then lands on the wrong host and login "succeeds" but the custom domain stays
+// signed out. Dynamic resolution uses the request Host when it is allow-listed.
 const explicitBaseURL = env("BETTER_AUTH_URL");
-// Explicit `string[]` (not a readonly tuple) — Better Auth's DynamicBaseURLConfig
-// requires a mutable `allowedHosts: string[]`.
 const previewAllowedHosts: string[] = [...PREVIEW_ALLOWED_HOSTS];
-// Local `npm run dev` (port 8080 contract). Browsers may send Origin as any of
-// these for the same server — trusting only `localhost` rejects `127.0.0.1` and
-// breaks email/password with "Invalid origin".
 const LOCAL_DEV_ORIGINS: string[] = [
   "http://localhost:8080",
   "http://127.0.0.1:8080",
   "http://[::1]:8080",
 ];
-const baseURL = explicitBaseURL ?? {
-  // Include loopback hosts so dynamic baseURL resolves for local email/password
-  // (not only the preview wildcard).
-  allowedHosts: [...previewAllowedHosts, "localhost", "127.0.0.1", "[::1]"],
-  // `auto` → trust both http:// and https:// expansions of allowedHosts
-  // (preview is https; local dev is http).
+
+const envHosts = [
+  hostFromUrlOrHost(explicitBaseURL),
+  hostFromUrlOrHost(env("VITE_PUBLIC_HOSTNAME")),
+  hostFromUrlOrHost(env("AUTH_PUBLIC_HOSTNAME")),
+  hostFromUrlOrHost(env("VERCEL_PROJECT_PRODUCTION_URL")),
+  hostFromUrlOrHost(env("VERCEL_URL")),
+  ...(env("AUTH_ALLOWED_HOSTS")
+    ?.split(",")
+    .map((s) => hostFromUrlOrHost(s))
+    .filter((h): h is string => Boolean(h)) ?? []),
+  ...EXTRA_AUTH_HOSTS,
+].filter((h, i, arr): h is string => Boolean(h) && arr.indexOf(h) === i);
+
+const dynamicAllowedHosts: string[] = [
+  ...previewAllowedHosts,
+  "localhost",
+  "127.0.0.1",
+  "[::1]",
+  // Platform + Vercel deployment hosts (multi-preview / aliases)
+  "*.grok.me",
+  "*.vercel.app",
+  ...envHosts,
+];
+
+const baseURL = {
+  allowedHosts: dynamicAllowedHosts,
   protocol: "auto" as const,
-  fallback: "http://localhost:8080",
+  fallback: explicitBaseURL ?? "http://localhost:8080",
 };
 
-// Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
-// Missing entries here surface as FORBIDDEN "Invalid origin".
-const trustedOrigins: string[] = explicitBaseURL
-  ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS]
-  : [
-      // Host wildcards (matched against Origin's host)
-      ...previewAllowedHosts,
-      // Full-origin wildcards (matched against Origin)
-      ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
-      ...LOCAL_DEV_ORIGINS,
-    ];
+// Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, …).
+// Must cover every host that can serve this app, or clients get "Invalid origin".
+const trustedOrigins: string[] = [
+  ...dynamicAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
+  ...LOCAL_DEV_ORIGINS,
+  ...(explicitBaseURL ? [explicitBaseURL] : []),
+];
 
 const databaseUrl = env("DATABASE_URL");
 
