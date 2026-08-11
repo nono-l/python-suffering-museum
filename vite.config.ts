@@ -65,13 +65,23 @@ function authPopupPlugin(): Plugin {
             return;
           }
 
+          // Prefer the public preview host (X-Forwarded-*) over the internal
+          // Host. Using the internal host makes OAuth redirect_uri
+          // `http://localhost:8080/...`, which the broker rejects after Google/X.
           const host = String(
             req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost:8080",
-          );
+          )
+            .split(",")[0]
+            ?.trim() || "localhost:8080";
           const proto = String(
             req.headers["x-forwarded-proto"] ??
-              ((req.socket as { encrypted?: boolean } | undefined)?.encrypted ? "https" : "http"),
-          );
+              ((req.socket as { encrypted?: boolean } | undefined)?.encrypted
+                ? "https"
+                : "http"),
+          )
+            .split(",")[0]
+            ?.trim() || "http";
+
           const requestHeaders = new Headers();
           for (const [key, value] of Object.entries(req.headers)) {
             if (value === undefined) continue;
@@ -81,9 +91,11 @@ function authPopupPlugin(): Plugin {
               requestHeaders.set(key, value);
             }
           }
-          // Ensure Host is the public preview host so Better Auth's dynamic
-          // baseURL / redirect_uri match the popup origin.
-          if (!requestHeaders.has("host")) requestHeaders.set("host", host);
+          // ALWAYS override Host / forwarded headers so Better Auth's dynamic
+          // baseURL and OAuth redirect_uri match the popup's public origin.
+          requestHeaders.set("host", host);
+          requestHeaders.set("x-forwarded-host", host);
+          requestHeaders.set("x-forwarded-proto", proto);
 
           const request = new Request(`${proto}://${host}${rawUrl}`, {
             method: "GET",
@@ -133,6 +145,9 @@ export default defineConfig(({ command }) => ({
     host: "0.0.0.0",
     port: 8080,
     strictPort: true,
+    // Live preview proxies with Host: *.grok-sandbox.com. Vite 8 defaults to
+    // blocking unknown hosts (403), which breaks the whole app + OAuth popup.
+    allowedHosts: true,
   },
   resolve: { tsconfigPaths: true },
   plugins: [

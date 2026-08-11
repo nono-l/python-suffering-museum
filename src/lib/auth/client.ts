@@ -61,15 +61,20 @@ function setBearerToken(token: string | null): void {
 }
 
 /**
- * The sandbox live preview runs this app inside an iframe on a `*.grok-sandbox.com`
- * host, where a full-page redirect to the broker can't work — so sign-in uses a
- * popup there and a normal redirect everywhere else.
+ * True when we must use the popup OAuth path (not a top-level redirect):
+ * - Live preview host `*.grok-sandbox.com`
+ * - Any iframe embed (top-level broker redirect can't complete inside a frame)
  */
 function inLivePreview(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.location.hostname.endsWith(".grok-sandbox.com")
-  );
+  if (typeof window === "undefined") return false;
+  if (window.location.hostname.endsWith(".grok-sandbox.com")) return true;
+  try {
+    if (window.self !== window.top) return true;
+  } catch {
+    // Cross-origin frame: accessing top throws → definitely embedded.
+    return true;
+  }
+  return false;
 }
 
 /** Message the popup posts back to the opener once sign-in completes. */
